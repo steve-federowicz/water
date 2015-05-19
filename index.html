@@ -2,12 +2,34 @@
 <meta charset="utf-8">
 <style>
 
-/* CSS goes here. */
+svg {
+  font: 10px sans-serif;
+}
+
+.caption {
+  font-weight: bold;
+}
+
+.key path {
+  display: none;
+}
+
+.key line {
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.county-border {
+  fill: none;
+  stroke: #000;
+  stroke-opacity: .3;
+}
 
 </style>
 <body>
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="http://d3js.org/topojson.v1.min.js"></script>
+<script src="http://d3js.org/colorbrewer.v1.min.js"></script>
 <script>
 
 
@@ -18,17 +40,44 @@ var svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height);
 
+var color = d3.scale.threshold()
+    .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+    .range(colorbrewer.Blues[9]);
+
 var path = d3.geo.path()
     .projection(null);
 
 d3.json("ca.json", function(error, ca) {
   	if (error) return console.error(error);
 
-  	var counties = topojson.feature(ca, ca.objects.counties);
+	var tracts = topojson.feature(ca, ca.objects.tracts);
 
- 	svg.append("path")
-  		.datum(counties)
-    	.attr("d", path);
+	// Clip tracts to land.
+	svg.append("defs").append("clipPath")
+	  .attr("id", "clip-land")
+	.append("path")
+	  .datum(topojson.feature(ca, ca.objects.counties))
+	  .attr("d", path);
+
+	// Group tracts by color for faster rendering.
+	svg.append("g")
+	  .attr("class", "tract")
+	  .attr("clip-path", "url(#clip-land)")
+	.selectAll("path")
+	  .data(d3.nest()
+	    .key(function(d) { return color(d.properties.population / d.properties.area * 2.58999e6); })
+	    .entries(tracts.features.filter(function(d) { return d.properties.area; })))
+	.enter().append("path")
+	  .style("fill", function(d) { return d.key; })
+	  .attr("d", function(d) { return path({type: "FeatureCollection", features: d.values}); });
+
+	// Draw county borders.
+	svg.append("path")
+	  .datum(topojson.mesh(ca, ca.objects.counties, function(a, b) { return a !== b; }))
+	  .attr("class", "county-border")
+	  .attr("d", path)
+	  .interpolate("linear");
+
 });
 
 </script>
